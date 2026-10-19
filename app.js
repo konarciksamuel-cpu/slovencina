@@ -18,6 +18,46 @@
     if (consent) progress = cleanProgress(JSON.parse(localStorage.getItem('sjl-progress-v1')), { topics, cards });
   } catch (_) { storageError = 'Uložený pokrok sa nepodarilo načítať. Učenie funguje ďalej počas tejto návštevy.'; }
   const state = { view: 'prehlad', topic: topics[0].id, search: '', cardTopic: 'all', onlyUnknown: false, deck: [], cardIndex: 0, flipped: false, quizTopic: 'all', quizSize: 10, quiz: null, sourceSearch: '' };
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  let departingCard;
+  let readingFrame;
+  function animate(element, frames, options = {}) {
+    if (!element?.animate || reducedMotion.matches) return;
+    return element.animate(frames, { duration: 360, easing: 'cubic-bezier(.16,1,.3,1)', ...options });
+  }
+  reducedMotion.addEventListener('change', () => {
+    if (!reducedMotion.matches) return;
+    document.getAnimations().forEach(animation => animation.cancel());
+    departingCard?.remove();
+  });
+  function updateReading() {
+    readingFrame = null;
+    const article = $('.notes-paper');
+    if (!article) return;
+    const sections = [...article.querySelectorAll('.note-section')];
+    const start = sections[0].getBoundingClientRect().top + scrollY - 90;
+    const end = sections.at(-1).getBoundingClientRect().bottom + scrollY - innerHeight + 24;
+    const value = end <= start ? 100 : Math.round(Math.max(0, Math.min(1, (scrollY - start) / (end - start))) * 100);
+    let current = sections[0];
+    for (const section of sections) {
+      if (section.getBoundingClientRect().top <= 120) current = section;
+      else break;
+    }
+    if (value === 100) current = sections.at(-1);
+    $('#reading-progress').value = value;
+    $('#reading-percent').textContent = value + ' %';
+    $('#reading-section').textContent = current.querySelector('h2').textContent;
+    article.querySelectorAll('[data-scroll]').forEach(button => {
+      if (button.dataset.scroll === current.id) button.setAttribute('aria-current', 'location');
+      else button.removeAttribute('aria-current');
+    });
+  }
+  function scheduleReading() {
+    if (!readingFrame) readingFrame = requestAnimationFrame(updateReading);
+  }
+  window.addEventListener('scroll', scheduleReading, { passive: true });
+  window.addEventListener('resize', scheduleReading);
+  document.addEventListener('load', event => { if (event.target.matches?.('.notes-paper img')) scheduleReading(); }, true);
   let toastTimer;
   function announce(message) { $('#announcement').textContent = message; }
   function notify(message) {
@@ -85,7 +125,7 @@
     }
     const topic = getTopic(state.topic);
     const complete = progress.read.includes(topic.id);
-    return `${heading('Poznámky', 'Sedem tém z dodaných materiálov.')}<div class="notes-layout"><nav class="chapter-nav" aria-label="Témy poznámok">${topics.map(t => `<a href="#poznamky/${t.id}"${t.id === topic.id ? ' aria-current="page"' : ''}><span class="chapter-dot ${t.color}" aria-hidden="true"></span>${escape(t.title)}${progress.read.includes(t.id) ? icon('check') : ''}</a>`).join('')}<a class="syllabus-link" href="#materialy/18">Čo ešte je v rozsahu? ${icon('external')}</a></nav><article class="notes-paper"><div class="lesson-heading"><span class="topic-mark ${topic.color}" aria-hidden="true">${topic.mark}</span><div><h2>${escape(topic.title)}</h2><p>${escape(topic.description)}</p></div></div><div class="lesson-actions"><a class="button secondary small" href="#karty/${topic.id}">${icon('flip')} Karty k téme</a><a class="text-link" href="#kviz/${topic.id}">Precvičiť tému ${icon('arrow')}</a></div><div class="lesson-outline">${topic.sections.map((s, i) => `<button data-scroll="part-${i}">${escape(s.title)}</button>`).join('')}</div>${topic.sections.map(renderSection).join('')}<div class="lesson-finish"><div><h3>${complete ? 'Tému máš označenú ako prečítanú.' : 'Dokončená téma?'}</h3><p>Označenie je tvoja vlastná pomôcka, nie výsledok skúšky.</p></div><button class="button ${complete ? 'secondary' : 'primary'}" data-complete="${topic.id}" aria-pressed="${complete}">${icon('check')} ${complete ? 'Zrušiť označenie' : 'Označiť ako prečítané'}</button><a class="text-link" href="#karty/${topic.id}">Prejsť na flashkarty ${icon('arrow')}</a></div></article></div>`;
+    return `${heading('Poznámky', 'Sedem tém z dodaných materiálov.')}<div class="notes-layout"><nav class="chapter-nav" aria-label="Témy poznámok">${topics.map(t => `<a href="#poznamky/${t.id}"${t.id === topic.id ? ' aria-current="page"' : ''}><span class="chapter-dot ${t.color}" aria-hidden="true"></span>${escape(t.title)}${progress.read.includes(t.id) ? icon('check') : ''}</a>`).join('')}<a class="syllabus-link" href="#materialy/18">Čo ešte je v rozsahu? ${icon('external')}</a></nav><article class="notes-paper"><div class="lesson-heading"><span class="topic-mark ${topic.color}" aria-hidden="true">${topic.mark}</span><div><h2>${escape(topic.title)}</h2><p>${escape(topic.description)}</p></div></div><div class="lesson-actions"><a class="button secondary small" href="#karty/${topic.id}">${icon('flip')} Karty k téme</a><a class="text-link" href="#kviz/${topic.id}">Precvičiť tému ${icon('arrow')}</a></div><div class="lesson-outline">${topic.sections.map((s, i) => `<button data-scroll="part-${i}">${escape(s.title)}</button>`).join('')}</div><div class="reading-status"><span id="reading-section">${escape(topic.sections[0].title)}</span><span id="reading-percent" aria-hidden="true">0 %</span><progress id="reading-progress" value="0" max="100" aria-label="Pozícia v poznámkach"></progress></div>${topic.sections.map(renderSection).join('')}<div class="lesson-finish"><div><h3>${complete ? 'Tému máš označenú ako prečítanú.' : 'Dokončená téma?'}</h3><p>Označenie je tvoja vlastná pomôcka, nie výsledok skúšky.</p></div><button class="button ${complete ? 'secondary' : 'primary'}" data-complete="${topic.id}" aria-pressed="${complete}">${icon('check')} ${complete ? 'Zrušiť označenie' : 'Označiť ako prečítané'}</button><a class="text-link" href="#karty/${topic.id}">Prejsť na flashkarty ${icon('arrow')}</a></div></article></div>`;
   }
   function makeDeck() {
     state.deck = shuffle(cards.filter(c => (state.cardTopic === 'all' || c.topic === state.cardTopic) && (!state.onlyUnknown || !progress.known.includes(c.id)))).map(c => c.id);
@@ -105,7 +145,7 @@
       body = `<div class="session-finished"><span class="success-seal">${icon('check')}</span><h2>Sada je za tebou.</h2><p>Prešiel si ${state.deck.length} kariet. Z nich máš ${known} označených ako zvládnuté.</p><div class="finish-actions">${known < state.deck.length ? '<button class="button primary" id="repeat-unknown">Zopakovať nezvládnuté</button>' : ''}<button class="button secondary" id="repeat-deck">Prejsť sadu znova ${icon('flip')}</button></div><a class="text-link" href="#kviz${state.cardTopic === 'all' ? '' : '/' + state.cardTopic}">Overiť si učivo v kvíze ${icon('arrow')}</a></div>`;
     } else {
       const topic = getTopic(card.topic);
-      body = `<div class="card-session"><div class="session-meta"><span>${escape(topic.title)}</span><span>Karta <strong>${state.cardIndex + 1}</strong> / ${state.deck.length}</span></div><progress class="session-progress" value="${state.cardIndex}" max="${state.deck.length}" aria-label="Postup v sade kariet"></progress><button class="flashcard${state.flipped ? ' revealed' : ''}" id="flip-card" aria-expanded="${state.flipped}" aria-label="${escape(state.flipped ? 'Odpoveď: ' + card.back + ' Kliknutím sa vrátiš na otázku.' : 'Otázka: ' + card.front + ' Kliknutím zobrazíš odpoveď.')}"><span class="flashcard-face-label">${state.flipped ? 'Odpoveď' : 'Otázka'} ${icon('flip')}</span><span class="flashcard-content">${escape(state.flipped ? card.back : card.front)}</span><span class="flashcard-hint">${state.flipped ? 'Ako dobre si si odpoveď vybavil?' : 'Skús si odpovedať. Potom kartu otoč.'}</span></button><div class="card-source">${sourceLink(card.source)}<span>${progress.known.includes(card.id) ? 'Už označená ako zvládnutá' : 'Vlastné hodnotenie po otočení karty'}</span></div><div class="card-rating"><button class="button secondary" id="rate-again"${state.flipped ? '' : ' disabled'}>${icon('flip')} Ešte zopakovať <kbd>1</kbd></button><button class="button primary" id="rate-known"${state.flipped ? '' : ' disabled'}>${icon('check')} Toto už viem <kbd>2</kbd></button></div><div class="card-controls"><button class="text-button" id="previous-card"${state.cardIndex ? '' : ' disabled'}>${icon('back')} Predošlá karta</button><span><kbd>Medzerník</kbd> otočí kartu</span></div></div>`;
+      body = `<div class="card-session"><div class="session-meta"><span>${escape(topic.title)}</span><span>Karta <strong>${state.cardIndex + 1}</strong> / ${state.deck.length}</span></div><progress class="session-progress" value="${state.cardIndex}" max="${state.deck.length}" aria-label="Postup v sade kariet"></progress><button class="flashcard${state.flipped ? ' revealed' : ''}" id="flip-card" aria-expanded="${state.flipped}" aria-label="${escape(state.flipped ? 'Odpoveď: ' + card.back + ' Kliknutím sa vrátiš na otázku.' : 'Otázka: ' + card.front + ' Kliknutím zobrazíš odpoveď.')}"><span class="flashcard-inner"><span class="flashcard-face flashcard-front" aria-hidden="${state.flipped}"><span class="flashcard-face-label">Otázka ${icon('flip')}</span><span class="flashcard-content">${escape(card.front)}</span><span class="flashcard-hint">Skús si odpovedať. Potom kartu otoč.</span></span><span class="flashcard-face flashcard-back" aria-hidden="${!state.flipped}"><span class="flashcard-face-label">Odpoveď ${icon('flip')}</span><span class="flashcard-content">${escape(card.back)}</span><span class="flashcard-hint">Ako dobre si si odpoveď vybavil?</span></span></span></button><div class="card-source">${sourceLink(card.source)}<span>${progress.known.includes(card.id) ? 'Už označená ako zvládnutá' : 'Vlastné hodnotenie po otočení karty'}</span></div><div class="card-rating"><button class="button secondary" id="rate-again"${state.flipped ? '' : ' disabled'}>${icon('flip')} Ešte zopakovať <kbd>1</kbd></button><button class="button primary" id="rate-known"${state.flipped ? '' : ' disabled'}>${icon('check')} Toto už viem <kbd>2</kbd></button></div><div class="card-controls"><button class="text-button" id="previous-card"${state.cardIndex ? '' : ' disabled'}>${icon('back')} Predošlá karta</button><span><kbd>Medzerník</kbd> otočí kartu</span></div></div>`;
     }
     return `${heading('Flashkarty', 'Otoč kartu a označ, či si odpoveď vedel.', `<span class="quiet-badge">${progress.known.length} / ${cards.length} zvládnutých</span>`)}${cardToolbar()}${body}`;
   }
@@ -128,7 +168,7 @@
     if (!item) return empty('Nie sú dostupné otázky.', 'Vyber inú tému.', '<button class="button primary" id="new-quiz">Späť na výber</button>');
     const question = item.question;
     const answer = quiz.answers[quiz.index];
-    return `${heading('Precvičovanie', escape(getTopic(question.topic).title), '<button class="text-button" id="leave-quiz">Ukončiť túto sadu</button>')}<div class="quiz-session"><div class="session-meta"><span>Precvičovanie</span><span>Otázka <strong>${quiz.index + 1}</strong> / ${quiz.items.length}</span></div><progress class="session-progress" value="${quiz.index + (answer ? 1 : 0)}" max="${quiz.items.length}" aria-label="Postup v kvíze"></progress>${question.context ? `<div class="question-context"><strong>Najprv si prečítaj ukážku</strong><p>${escape(question.context)}</p>${sourceLink(question.source)}</div>` : ''}<h2 id="question-title" tabindex="-1">${escape(question.prompt)}</h2><div class="answer-options">${item.choices.map((choice, index) => `<button class="answer-option${answer ? choice.index === question.answer ? ' correct' : choice.index === answer.selected ? ' incorrect' : '' : ''}" data-answer="${choice.index}"${answer ? ' disabled' : ''} aria-pressed="${Boolean(answer && answer.selected === choice.index)}"><span class="option-letter">${'ABCD'[index]}</span><span>${escape(choice.label)}</span>${answer && choice.index === question.answer ? icon('check') : answer && choice.index === answer.selected ? icon('cross') : ''}</button>`).join('')}</div>${answer ? `<div class="quiz-feedback ${answer.correct ? 'positive' : 'negative'}" role="status"><strong>${icon(answer.correct ? 'check' : 'info')}${answer.correct ? 'Správne.' : 'Nesprávne.'}</strong>${!answer.correct ? `<p>Správna odpoveď: <strong>${escape(question.options[question.answer])}</strong></p>` : ''}<p>${escape(question.explanation)}</p>${sourceLink(question.source)}</div><div class="quiz-next"><button class="button primary" id="next-question">${quiz.index === quiz.items.length - 1 ? 'Pozrieť výsledok' : 'Ďalšia otázka'} ${icon('arrow')}</button></div>` : '<p class="question-hint">Vyber jednu odpoveď. Hneď potom uvidíš vysvetlenie.</p>'}</div>`;
+    return `${heading('Precvičovanie', escape(getTopic(question.topic).title), '<button class="text-button" id="leave-quiz">Ukončiť túto sadu</button>')}<div class="quiz-session${answer ? ' answered' : ''}"><div class="session-meta"><span>Precvičovanie</span><span>Otázka <strong>${quiz.index + 1}</strong> / ${quiz.items.length}</span></div><progress class="session-progress" value="${quiz.index + (answer ? 1 : 0)}" max="${quiz.items.length}" aria-label="Postup v kvíze"></progress>${question.context ? `<div class="question-context"><strong>Najprv si prečítaj ukážku</strong><p>${escape(question.context)}</p>${sourceLink(question.source)}</div>` : ''}<h2 id="question-title" tabindex="-1">${escape(question.prompt)}</h2><div class="answer-options">${item.choices.map((choice, index) => `<button class="answer-option${answer ? choice.index === question.answer ? ' correct' : choice.index === answer.selected ? ' incorrect' : '' : ''}" data-answer="${choice.index}"${answer ? ' disabled' : ''} aria-pressed="${Boolean(answer && answer.selected === choice.index)}"><span class="option-letter">${'ABCD'[index]}</span><span>${escape(choice.label)}</span>${answer && choice.index === question.answer ? icon('check') : answer && choice.index === answer.selected ? icon('cross') : ''}</button>`).join('')}</div>${answer ? `<div class="quiz-feedback ${answer.correct ? 'positive' : 'negative'}" role="status"><strong>${icon(answer.correct ? 'check' : 'info')}${answer.correct ? 'Správne.' : 'Nesprávne.'}</strong>${!answer.correct ? `<p>Správna odpoveď: <strong>${escape(question.options[question.answer])}</strong></p>` : ''}<p>${escape(question.explanation)}</p>${sourceLink(question.source)}</div><div class="quiz-next"><button class="button primary" id="next-question">${quiz.index === quiz.items.length - 1 ? 'Pozrieť výsledok' : 'Ďalšia otázka'} ${icon('arrow')}</button></div>` : '<p class="question-hint">Vyber jednu odpoveď. Hneď potom uvidíš vysvetlenie.</p>'}</div>`;
   }
   function renderMaterials() {
     const selectedId = Number(location.hash.split('/')[1]);
@@ -137,6 +177,7 @@
   }
   function renderCurrent(focus = false) {
     const renderers = { prehlad: renderHome, poznamky: renderNotes, karty: renderCards, kviz: renderQuiz, materialy: renderMaterials };
+    departingCard?.remove();
     $('#main').innerHTML = (renderers[state.view] || renderHome)();
     document.querySelectorAll('[data-nav]').forEach(link => {
       if (link.dataset.nav === state.view) link.setAttribute('aria-current', 'page');
@@ -144,6 +185,12 @@
     });
     document.title = `${{ prehlad: 'Prehľad', poznamky: 'Poznámky', karty: 'Flashkarty', kviz: 'Precvičovanie', materialy: 'Materiály' }[state.view]} — Slovenčina`;
     updateProgress();
+    scheduleReading();
+    if (focus) {
+      animate($('.page-heading, .hero-copy'), [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'translateY(0)' }]);
+      const content = $('.home-columns, .notes-layout, .learning-toolbar, .quiz-setup, .materials-toolbar');
+      animate(content, [{ transform: 'translateY(16px)' }, { transform: 'translateY(0)' }], { delay: 50, duration: 420 });
+    }
     if (focus) $('#page-title')?.focus({ preventScroll: true });
     const selected = state.view === 'materialy' && $('#source-' + Number(location.hash.split('/')[1]));
     if (selected) selected.scrollIntoView({ block: 'start' });
@@ -170,21 +217,45 @@
     if (render) renderCurrent();
   }
   function flipCard() {
-    if (!state.deck[state.cardIndex]) return;
+    const card = cards.find(card => card.id === state.deck[state.cardIndex]);
+    const button = $('#flip-card');
+    if (!card || !button) return;
     state.flipped = !state.flipped;
-    renderCurrent();
-    $('#flip-card')?.focus({ preventScroll: true });
+    button.classList.toggle('revealed', state.flipped);
+    button.setAttribute('aria-expanded', state.flipped);
+    button.setAttribute('aria-label', state.flipped ? 'Odpoveď: ' + card.back + ' Kliknutím sa vrátiš na otázku.' : 'Otázka: ' + card.front + ' Kliknutím zobrazíš odpoveď.');
+    button.querySelector('.flashcard-front').setAttribute('aria-hidden', state.flipped);
+    button.querySelector('.flashcard-back').setAttribute('aria-hidden', !state.flipped);
+    $('#rate-again').disabled = $('#rate-known').disabled = !state.flipped;
+    button.focus({ preventScroll: true });
+    announce(state.flipped ? 'Odpoveď: ' + card.back : 'Otázka: ' + card.front);
   }
   function rateCard(known) {
     if (!state.flipped) return;
     const id = state.deck[state.cardIndex];
     if (!id) return;
+    const previous = $('#flip-card');
+    const bounds = previous?.getBoundingClientRect();
+    const ghost = !reducedMotion.matches && previous?.animate ? previous.cloneNode(true) : null;
     progress.known = progress.known.filter(value => value !== id);
     if (known) progress.known.push(id);
     persist();
     state.cardIndex++;
     state.flipped = false;
     renderCurrent();
+    if (ghost) {
+      ghost.removeAttribute('id');
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.inert = true;
+      ghost.disabled = true;
+      ghost.classList.add('card-exit');
+      Object.assign(ghost.style, { position: 'fixed', margin: '0', left: bounds.left + 'px', top: bounds.top + 'px', width: bounds.width + 'px', height: bounds.height + 'px', zIndex: '10', pointerEvents: 'none' });
+      document.body.append(ghost);
+      departingCard = ghost;
+      const direction = known ? 1 : -1;
+      animate(ghost, [{ opacity: 1, transform: 'translateX(0) rotate(0)' }, { opacity: 0, transform: `translateX(${direction * 85}px) rotate(${direction * 5}deg)` }], { duration: 280 }).finished.then(() => ghost.remove(), () => ghost.remove());
+      animate($('#flip-card'), [{ transform: `translateX(${-direction * 24}px)` }, { transform: 'translateX(0)' }], { duration: 340 });
+    }
     $('#flip-card')?.focus({ preventScroll: true });
     announce(state.cardIndex < state.deck.length ? `Karta ${state.cardIndex + 1} z ${state.deck.length}` : 'Sada kariet dokončená.');
   }
@@ -291,6 +362,7 @@
   window.addEventListener('hashchange', route);
   makeDeck();
   route();
+  document.fonts.ready.then(scheduleReading);
   $('#consent-banner').hidden = consent !== null;
   if (storageError) notify(storageError);
 })();

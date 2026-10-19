@@ -18,6 +18,8 @@ Ukladanie sa zapína dobrovoľne. Pokrok ostáva iba v localStorage konkrétneho
 
 Flashkartu otočí klik alebo Enter na zameranej karte; medzerník funguje pri zameranej karte alebo samotnej stránke. Po odhalení odpovede a pri focuse na karte `1` znamená ešte zopakovať a `2` toto už viem. Skratky nepreberajú ovládanie polí ani otvoreného dialógu. Všetky funkcie majú aj bežné tlačidlá. Escape zatvorí zväčšený obrázok a nastavenia. Poznámky možno vytlačiť štandardným tlačovým dialógom prehliadača.
 
+Karta sa otáča v 3D na tom istom tlačidle; po hodnotení odíde doprava (zvládnutá) alebo doľava (zopakovať). Poznámky ukazujú aktuálnu časť a percento pozície pri posúvaní. Označenie témy ako prečítanej zostáva ručné. Kvíz potvrdí odpoveď vykreslením fajky alebo krátkym pohybom chyby a príchodom vysvetlenia. Krátke prechody stránok, odkazov a dialógov používajú iba CSS a natívne Web Animations. Systémové obmedzenie pohybu ich vypne aj počas rozbehnutej animácie; nepribudli žiadne závislosti ani vzdialené požiadavky.
+
 ## Súbory
 
 `index.html`, `styles.css`, `app.js`, `core.js`, `content.js`, `sources.js`, `info.html`, `favicon.svg`, `fonts/`, `materialy/`, `Obrazky/`. Projektový priečinok `Obrazky` je relatívny odkaz na `../../Obrazky/SJL-vstupna-pisomka`, aby originálne vizuálne prílohy žili na kanonickom mieste v trezore. Pripravený ZIP tento odkaz nahrádza skutočnými súbormi a je prenosný samostatne.
@@ -27,6 +29,8 @@ Písma: Instrument Sans, Copyright 2022 The Instrument Project Authors, SIL Open
 ## Overenie
 
 Bez závislostí: `node tests/core.test.cjs`. Pri odovzdaní prešli všetky štyri testy: hľadanie s diakritikou, validácia poškodeného pokroku, miešanie bez strát a integrita učiva vrátane SHA-256 všetkých 30 originálov, obrázkov a väzieb na zdroje. Prehliadačová kontrola prešla 23 scenármi: spustenie cez `file://`, učenie, vyhľadávanie, klávesnica, mobil od 320 px, úložisko a znížený pohyb; nezachytila externé požiadavky ani chyby konzoly. Sedem snímok zachytáva úvod, poznámky a karty na desktope aj mobile a kvíz na desktope. Kontrola používa už nainštalovaný Playwright v pracovnom prostredí, nie závislosť stránky; dôkazy sú uložené mimo dodávanej aplikácie.
+
+Kontrola pohybu: `node tests/motion.check.cjs [URL]`, ak je vývojový nástroj `@playwright/test` dostupný priamo alebo cez `NODE_PATH`. Bez URL otvorí lokálny `index.html`. Overuje zachovanie tlačidla a prístupných strán karty, skutočný medzistav otočenia, čistenie odchádzajúcej karty, rýchlu navigáciu, posúvanie poznámok, uzamknutie odpovede v kvíze, dynamickú zmenu preferencie pohybu a všetkých 95 kariet pri šírke 320 px. `STUDY_EVIDENCE` voliteľne určuje priečinok snímky medzistavu. Overenie prebieha v Chromium; Firefox, Safari ani fyzický telefón neboli overené.
 
 ## Publikovanie a podklady
 
